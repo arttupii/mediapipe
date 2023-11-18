@@ -21,6 +21,9 @@ import cv2
 import mediapipe as mp
 import numpy as np
 
+import time, libcamera
+from picamera2 import Picamera2, Preview
+
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 from mediapipe.framework.formats import landmark_pb2
@@ -59,9 +62,15 @@ def run(model: str, num_poses: int,
   """
 
     # Start capturing video input from the camera
-    cap = cv2.VideoCapture(camera_id)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+    #cap = cv2.VideoCapture(camera_id)
+    #cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+    #cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+
+    picam = Picamera2()
+    config = picam.create_preview_configuration(main={'format': 'BGR888', "size": (640, 480)})
+    config["transform"] = libcamera.Transform(hflip=0, vflip=1)
+    picam.configure(config)
+    picam.start()
 
     # Visualization parameters
     row_size = 50  # pixels
@@ -99,14 +108,14 @@ def run(model: str, num_poses: int,
     detector = vision.PoseLandmarker.create_from_options(options)
 
     # Continuously capture images from the camera and run inference
-    while cap.isOpened():
-        success, image = cap.read()
-        if not success:
-            sys.exit(
-                'ERROR: Unable to read from webcam. Please verify your webcam settings.'
-            )
-
-        image = cv2.flip(image, 1)
+    while True:
+        image = picam.capture_array()
+        #if not success:
+        #    sys.exit(
+        #        'ERROR: Unable to read from webcam. Please verify your webcam settings.'
+        #    )#
+        
+        #image = cv2.flip(image, 1)
 
         # Convert the image from BGR to RGB as required by the TFLite model.
         rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -125,9 +134,16 @@ def run(model: str, num_poses: int,
 
         if DETECTION_RESULT:
             # Draw landmarks.
+            print("*********************")
+            #https://developers.google.com/mediapipe/solutions/vision/pose_landmarker
+            print(DETECTION_RESULT.pose_landmarks)
+            print("*********************")
+            
             for pose_landmarks in DETECTION_RESULT.pose_landmarks:
                 # Draw the pose landmarks.
                 pose_landmarks_proto = landmark_pb2.NormalizedLandmarkList()
+               
+                
                 pose_landmarks_proto.landmark.extend([
                     landmark_pb2.NormalizedLandmark(x=landmark.x, y=landmark.y,
                                                     z=landmark.z) for landmark
@@ -157,9 +173,9 @@ def run(model: str, num_poses: int,
             break
 
     detector.close()
-    cap.release()
+    #cap.release()
     cv2.destroyAllWindows()
-
+    picam.stop()
 
 def main():
     parser = argparse.ArgumentParser(
